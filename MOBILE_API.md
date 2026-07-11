@@ -1,99 +1,62 @@
-# Mobile Field Inspector API
+# Mobile Field Inspector API — Quick Reference
 
-Base URL: `http://localhost:3001/api/v1`
+## Live environment
 
-Auth: `Authorization: Bearer {accessToken}`
+| | Now (IP) | Soon (domain, ~24h) |
+|--|----------|---------------------|
+| **API base** | `http://119.30.113.24:3001/api/v1` | `http://pnmc.esspl.com.pk:3001/api/v1` |
+| **Portal** | `http://119.30.113.24:3000` | `http://pnmc.esspl.com.pk:3000` |
 
-## Security (required)
+**Auth:** JWT Bearer only — **no API key**.  
+**Header:** `Authorization: Bearer {accessToken}`  
+**Demo mobile user:** `inspector@pnmc.gov.pk` / `Field@123`  
+**Login must include:** `"client": "mobile"`
 
-- **Email:** letters, numbers, `@`, `.` only — e.g. `admin@admin.com`  
-  Regex: `^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*@[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$`
-- **Login rate limit:** 10 / minute
-- **Refresh tokens rotate** — always save the new refresh token from `/auth/refresh`
-- **Logout** revokes refresh token server-side
-- Store tokens in `flutter_secure_storage`
-- All write bodies are validated (max lengths, UUID paths, no unknown fields)
-- Uploads: JPEG/PNG/PDF evidence ≤10MB; signature JPEG/PNG ≤512KB; content verified
-- File URLs are **signed** (`?exp=&sig=`) — do not strip query params; refresh inspection if expired
+### Tokens
 
-## Login
+| Token | Lifetime | Notes |
+|-------|----------|--------|
+| `accessToken` | ~15 min | Send on every call |
+| `refreshToken` | ~7 days | `POST /auth/refresh` — response returns **new** access + refresh (replace both) |
 
-```
-POST /auth/login
-{ "email": "inspector@pnmc.gov.pk", "password": "Field@123", "client": "mobile" }
-```
+Store in `flutter_secure_storage`. Logout revokes refresh server-side.
 
-Always send `"client": "mobile"`. Portal login (`client: "portal"`) blocks field users.
+### Security
 
-## Refresh
+- Email: letters, numbers, `@`, `.` only  
+- Uploads: evidence JPEG/PNG/PDF ≤10MB; signature JPEG/PNG ≤512KB; form field `file`  
+- File URLs are signed (`?exp=&sig=`) — do not strip query params  
 
-```
-POST /auth/refresh
-{ "refreshToken": "…" }
-```
+## Endpoints
 
-Returns new `accessToken` + new `refreshToken` (rotation).
+### Auth
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `GET /auth/me`
+- `POST /auth/logout`
 
-## Activity (optional)
+### Lookups
+- `GET /mobile/lookups`
+- `GET /mobile/lookups/provinces`
+- `GET /mobile/lookups/provinces/:provinceId/districts`
+- `GET /mobile/lookups/applied-for`
+- `GET /mobile/lookups/inspection-types`
+- `GET /mobile/activity`
 
-```
-GET /mobile/activity
-```
+### Checklist
+- `GET /checklist-templates/active`
 
-Returns your own recent audit trail. All create/update/submit actions are logged automatically by the server — no write API needed.
+### Inspections
+- `GET /mobile/inspections`
+- `GET /mobile/inspections/:id`
+- `POST /mobile/inspections`
+- `PATCH /mobile/inspections/:id`
+- `PATCH /mobile/inspections/:id/fee-details`
+- `PATCH /mobile/inspections/:id/requirements/:responseId`
+- `POST /mobile/inspections/:id/requirements/:responseId/comments`
+- `POST /mobile/inspections/:id/requirements/:responseId/attachments`
+- `DELETE /mobile/inspections/:id/attachments/:attachmentId`
+- `POST /mobile/inspections/:id/signature`
+- `POST /mobile/inspections/:id/submit`
 
-Demo field user: `inspector@pnmc.gov.pk` / `Field@123` (`isMobileUser: true`)
-
-## Form lookups (use for dropdowns)
-
-```
-GET /mobile/lookups
-```
-
-Returns provinces (with nested districts), applied-for categories, and inspection types.
-
-| Method | Path |
-|--------|------|
-| GET | `/mobile/lookups` |
-| GET | `/mobile/lookups/provinces` |
-| GET | `/mobile/lookups/provinces/:provinceId/districts` |
-| GET | `/mobile/lookups/applied-for` |
-| GET | `/mobile/lookups/inspection-types` |
-
-`inspection-types` = form **Status** field: New / Enhancement / Re-inspection / Evening Shift
-
-## Inspection APIs
-
-| Method | Path | Notes |
-|--------|------|-------|
-| GET | `/mobile/inspections` | Own list |
-| GET | `/mobile/inspections/:id` | Full form (UUID) |
-| POST | `/mobile/inspections` | Create (prefer IDs; validated lengths) |
-| PATCH | `/mobile/inspections/:id` | Partial save |
-| PATCH | `/mobile/inspections/:id/fee-details` | Fee table (amounts ≥ 0) |
-| PATCH | `/mobile/inspections/:id/requirements/:responseId` | ok / reject |
-| POST | `.../comments` | Comment ≤ 2000 chars |
-| POST | `.../attachments` | multipart `file` |
-| DELETE | `.../attachments/:attachmentId` | Before submit |
-| POST | `/mobile/inspections/:id/signature` | Signature |
-| POST | `/mobile/inspections/:id/submit` | Submit & lock |
-
-### Create (preferred)
-
-```json
-{
-  "instituteName": "Abc Nursing Institute",
-  "provinceId": "uuid",
-  "districtId": "uuid",
-  "appliedForId": "uuid",
-  "type": "newInspection",
-  "principalName": "Dr. Sarah Ahmed",
-  "principalRegNo": "PN-4521",
-  "principalQualification": "MSN",
-  "inspectionDate": "2026-07-10"
-}
-```
-
-`type`: `newInspection` | `enhancement` | `reinspection` | `eveningShift`
-
-Full handoff: see `MOBILE_DEVELOPER_HANDOFF.md`
+Full guide: **`MOBILE_DEVELOPER_HANDOFF.md`**

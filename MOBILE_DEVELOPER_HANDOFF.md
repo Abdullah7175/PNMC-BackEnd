@@ -1,128 +1,323 @@
-# PNMC Field Inspector — Mobile API Handoff
+# PNMC Field Inspector — Mobile Developer Complete Guide
 
 **For:** Flutter / Mobile App Developer  
-**From:** Backend Team  
-**Date:** 10 July 2026  
+**From:** Backend / API Team  
+**Updated:** 11 July 2026  
 **API Version:** `v1`
 
 ---
 
-## 1. Base URL & Auth
+## 0. Copy-paste summary (start here)
 
 | Item | Value |
 |------|--------|
-| **Base URL (local)** | `http://localhost:3001/api/v1` |
-| **Swagger docs** | `http://localhost:3001/docs` |
-| **Auth type** | JWT Bearer token |
+| **Live server IP (use now)** | `119.30.113.24` |
+| **Domain (use after DNS is live ~24h)** | `pnmc.esspl.com.pk` |
+| **API Base URL (IP — current)** | `http://119.30.113.24:3001/api/v1` |
+| **API Base URL (domain — soon)** | `http://pnmc.esspl.com.pk:3001/api/v1` *(or `https://…` if SSL is enabled later)* |
+| **Supervisor portal (web)** | `http://119.30.113.24:3000` → later `http://pnmc.esspl.com.pk:3000` |
+| **Auth type** | JWT Bearer — **no static API key** |
 | **Header on every protected call** | `Authorization: Bearer {accessToken}` |
-| **Content-Type (JSON)** | `application/json` |
-| **Content-Type (uploads)** | `multipart/form-data` |
+| **Demo mobile user** | `inspector@pnmc.gov.pk` / `Field@123` |
+| **Login must send** | `"client": "mobile"` |
 
-> There is **no static API key**. The mobile app logs in and receives a JWT. Store tokens in `flutter_secure_storage`.
+### Flutter config suggestion
+
+```dart
+// lib/config/api_config.dart
+class ApiConfig {
+  // USE THIS NOW (IP is live)
+  static const String baseUrl = 'http://119.30.113.24:3001/api/v1';
+
+  // SWITCH TO THIS when domain is ready (after ~24 hours)
+  // static const String baseUrl = 'http://pnmc.esspl.com.pk:3001/api/v1';
+  // Prefer HTTPS when SSL certificate is installed:
+  // static const String baseUrl = 'https://pnmc.esspl.com.pk/api/v1';
+}
+```
+
+Put base URL behind a single constant so you only change one line when the domain goes live.
 
 ---
 
-## 1b. Security requirements (OWASP — required for mobile)
+## 1. Environments & URLs
 
-### Email format (login & accounts)
+### 1.1 Production (live now)
 
-Only letters, numbers, `@`, and `.` are allowed:
+| Service | URL |
+|---------|-----|
+| **API (JSON)** | `http://119.30.113.24:3001/api/v1` |
+| **API host** | `119.30.113.24` |
+| **API port** | `3001` |
+| **Portal (supervisors)** | `http://119.30.113.24:3000` |
+
+All mobile paths are under:
 
 ```
-admin@admin.com          ✅
-inspector@pnmc.gov.pk    ✅
-user+tag@mail.com        ❌  (+ not allowed)
-user_name@mail.com       ❌  (_ not allowed)
+{BASE_URL}/mobile/...
 ```
 
-Regex:
+Example full URL:
+
+```
+http://119.30.113.24:3001/api/v1/mobile/inspections
+```
+
+### 1.2 Domain (pending — expected within ~24 hours)
+
+| Item | Value |
+|------|--------|
+| Domain | `pnmc.esspl.com.pk` |
+| Planned API base | `http://pnmc.esspl.com.pk:3001/api/v1` |
+| Planned portal | `http://pnmc.esspl.com.pk:3000` |
+
+After DNS works, test:
+
+```bash
+curl -I http://pnmc.esspl.com.pk:3001/api/v1/auth/login
+```
+
+Then update the app’s `baseUrl` to the domain (and HTTPS when available). Paths stay the same — only the host changes.
+
+### 1.3 Local development (optional)
+
+| Item | Value |
+|------|--------|
+| Local API | `http://localhost:3001/api/v1` |
+
+---
+
+## 2. Authentication — tokens & keys
+
+### Important: there is NO API key / client secret
+
+- There is **no** X-API-Key, no static app key, no secret shared in the APK.
+- Security is: **login → JWT access token + refresh token**.
+- Store both in **`flutter_secure_storage`** (never `SharedPreferences`).
+
+### 2.1 Tokens explained
+
+| Token | What it is | Lifetime | Where used |
+|-------|------------|----------|------------|
+| **accessToken** | JWT string | ~**15 minutes** | `Authorization: Bearer …` on every API call |
+| **refreshToken** | Opaque random string (not JWT) | ~**7 days** | Only for `POST /auth/refresh` |
+
+On every successful refresh, the server returns a **new accessToken and a new refreshToken**.  
+**Always replace both** on the device. Old refresh tokens become invalid (rotation).
+
+### 2.2 Login
+
+```
+POST {BASE_URL}/auth/login
+Content-Type: application/json
+```
+
+```json
+{
+  "email": "inspector@pnmc.gov.pk",
+  "password": "Field@123",
+  "client": "mobile"
+}
+```
+
+| Field | Required | Rules |
+|-------|----------|--------|
+| `email` | Yes | Letters, numbers, `@`, `.` only |
+| `password` | Yes | 6–128 chars |
+| `client` | Yes for mobile | Must be `"mobile"` |
+
+**Email regex (client + server):**
 
 ```
 ^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*@[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$
 ```
 
-Invalid emails return **400** with a validation message (not a vague login error).
+✅ `inspector@pnmc.gov.pk`  
+❌ `user+tag@mail.com`  
+❌ `user_name@mail.com`
 
-### Login / tokens
+**Success (200):**
 
-| Rule | Detail |
-|------|--------|
-| Rate limit | Max **10 login** attempts / minute / IP |
-| Access token | Short-lived JWT (~15m). Send as `Authorization: Bearer …` |
-| Refresh token | Opaque token; **rotated** on every `POST /auth/refresh`. Old token becomes invalid. |
-| Logout | Call `POST /auth/logout` with Bearer token — server **revokes** refresh token |
-| Storage | Use `flutter_secure_storage` only — never SharedPreferences for tokens |
-
-### Refresh
-
-```
-POST /auth/refresh
-{ "refreshToken": "…" }
-```
-
-**Response** includes a **new** `accessToken` and a **new** `refreshToken`. Always replace both locally.
-
-### Input validation (all mobile write APIs)
-
-Server rejects oversized / invalid payloads with **400**:
-
-| Field | Limits |
-|-------|--------|
-| `instituteName` | required, 2–255 chars |
-| `province` / `district` / `appliedFor` (strings) | max 100 |
-| `principalName` / qualification | max 255 |
-| `principalRegNo` | max 100 |
-| `finalRemarks` / comments | max 1000 / 2000 |
-| Fee amounts | 0 … 99,999,999 ; max 50 line items |
-| Path IDs | must be UUID v4 |
-| Extra JSON fields | **rejected** (`forbidNonWhitelisted`) |
-
-### File uploads
-
-| Rule | Value |
-|------|--------|
-| Evidence | JPEG / PNG / PDF, max **10 MB**, magic-byte checked |
-| Signature | JPEG / PNG, max **512 KB** |
-| Field name | `file` (multipart) |
-| Rate limit | Uploads throttled |
-
-### Attachment / signature URLs
-
-URLs returned by the API are **signed and time-limited** (≈1 hour):
-
-```
-https://host/api/v1/files/inspections/.../file.jpg?exp=…&sig=…
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "base64url-opaque-token...",
+  "user": {
+    "id": "uuid",
+    "email": "inspector@pnmc.gov.pk",
+    "fullName": "Field Inspector",
+    "employeeId": "INS-2026-0001",
+    "province": "Sindh",
+    "district": "Karachi Central",
+    "isMobileUser": true,
+    "roles": [
+      { "id": "uuid", "code": "field_inspector", "name": "Field Inspector" }
+    ],
+    "permissions": [
+      "mobile.inspections.view",
+      "mobile.inspections.create",
+      "mobile.inspections.update",
+      "mobile.inspections.submit"
+    ]
+  }
+}
 ```
 
-- Do **not** strip `exp` / `sig` query params.
-- Do **not** assume `/files/…` works without the signature.
-- Re-fetch the inspection if a link expires (401/403 on image load).
+**Store on device:**
 
-### Demo field inspector account (mobile user)
+1. `accessToken`
+2. `refreshToken`
+3. `user` (for profile UI)
 
-| Field | Value |
-|-------|--------|
-| Email | `inspector@pnmc.gov.pk` |
-| Password | `Field@123` |
-| Flag | `isMobileUser: true` |
-| Role | `field_inspector` |
+**Rules:**
 
-Only users with **`isMobileUser = true`** can call `/mobile/*` endpoints.
+- Always send `"client": "mobile"` from Flutter.
+- Portal accounts (`isMobileUser: false`) **cannot** log in to mobile.
+- Mobile accounts **cannot** log in to the supervisor portal.
+- Login is rate-limited (~10 attempts / minute / IP).
 
----
-
-## 2b. Form dropdown lookups (IMPORTANT)
-
-Use these APIs to populate **Province**, **District**, **Applied for**, and **Status (inspection type)** on the registration form. Do **not** hardcode these lists.
-
-### Recommended: one call for everything
+### 2.3 Refresh (when access token expires → HTTP 401)
 
 ```
-GET /mobile/lookups
+POST {BASE_URL}/auth/refresh
+Content-Type: application/json
+```
+
+```json
+{
+  "refreshToken": "your-stored-refresh-token"
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "accessToken": "new-access-token...",
+  "refreshToken": "new-refresh-token...",
+  "user": { "...": "same shape as login user" }
+}
+```
+
+App logic:
+
+```
+API call → 401
+  → POST /auth/refresh with stored refreshToken
+  → save BOTH new tokens
+  → retry original API call
+  → if refresh fails → force logout
+```
+
+### 2.4 Profile
+
+```
+GET {BASE_URL}/auth/me
 Authorization: Bearer {accessToken}
 ```
 
-**Response:**
+### 2.5 Logout
+
+```
+POST {BASE_URL}/auth/logout
+Authorization: Bearer {accessToken}
+```
+
+Server **revokes** the refresh token. Clear local secure storage after this.
+
+---
+
+## 3. Demo / test accounts
+
+| Use | Email | Password | Notes |
+|-----|-------|----------|--------|
+| **Mobile app (field)** | `inspector@pnmc.gov.pk` | `Field@123` | `isMobileUser: true` — use this in Flutter |
+| Portal admin | `admin@pnmc.gov.pk` | `Admin@123` | Web portal only — **not** for mobile |
+| Portal supervisor | `supervisor@pnmc.gov.pk` | `Supervisor@123` | Web portal only |
+
+Only users with **`isMobileUser = true`** can call `/mobile/*`.
+
+---
+
+## 4. Security rules (must follow in the app)
+
+| Topic | Rule |
+|-------|------|
+| Token storage | `flutter_secure_storage` only |
+| Headers | `Authorization: Bearer {accessToken}` on all protected routes |
+| Extra JSON fields | Rejected by server — do not send unknown keys |
+| Path IDs | Must be UUID v4 |
+| Uploads | Field name must be `file` |
+| Evidence files | JPEG / PNG / PDF, max **10 MB** |
+| Signature | JPEG / PNG, max **512 KB** |
+| File URLs | Signed + expire (~1 hour). Keep `?exp=&sig=` query params |
+| Audit | Automatic on server — no write-audit API needed |
+
+---
+
+## 5. Complete API list
+
+Base = `http://119.30.113.24:3001/api/v1` (switch host to domain later)
+
+### Auth
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/login` | No | Login (`client: "mobile"`) |
+| POST | `/auth/refresh` | No | Rotate tokens |
+| GET | `/auth/me` | Bearer | Current user |
+| POST | `/auth/logout` | Bearer | Revoke refresh + logout |
+
+### Lookups (dropdowns)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/mobile/lookups` | Bearer | Provinces+districts, applied-for, inspection types |
+| GET | `/mobile/lookups/provinces` | Bearer | Provinces only |
+| GET | `/mobile/lookups/provinces/{provinceId}/districts` | Bearer | Districts for province |
+| GET | `/mobile/lookups/applied-for` | Bearer | Applied-for categories |
+| GET | `/mobile/lookups/inspection-types` | Bearer | Form Status values |
+| GET | `/mobile/activity` | Bearer | Own audit trail (optional) |
+
+### Checklist template
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/checklist-templates/active` | Bearer* | Official 23-item PNMC checklist |
+
+\*Requires a valid JWT (any authenticated user). Call after login.
+
+### Inspections (mobile)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/mobile/inspections` | Bearer | List **my** inspections |
+| GET | `/mobile/inspections/{id}` | Bearer | Full form (own only) |
+| POST | `/mobile/inspections` | Bearer | Create draft + 23 requirements |
+| PATCH | `/mobile/inspections/{id}` | Bearer | Partial save header fields |
+| PATCH | `/mobile/inspections/{id}/fee-details` | Bearer | Fee table (Flag J / item #9) |
+| PATCH | `/mobile/inspections/{id}/requirements/{responseId}` | Bearer | Set `ok` / `reject` |
+| POST | `/mobile/inspections/{id}/requirements/{responseId}/comments` | Bearer | Add comment |
+| POST | `/mobile/inspections/{id}/requirements/{responseId}/attachments` | Bearer | Upload evidence (multipart) |
+| DELETE | `/mobile/inspections/{id}/attachments/{attachmentId}` | Bearer | Delete attachment (before submit) |
+| POST | `/mobile/inspections/{id}/signature` | Bearer | Upload signature (multipart) |
+| POST | `/mobile/inspections/{id}/submit` | Bearer | Submit & lock form |
+
+**There is no delete-inspection API.**
+
+---
+
+## 6. Lookups (IMPORTANT)
+
+Do **not** hardcode provinces, districts, applied-for, or status types.
+
+```
+GET {BASE_URL}/mobile/lookups
+Authorization: Bearer {accessToken}
+```
+
+**Example response:**
+
 ```json
 {
   "provinces": [
@@ -147,238 +342,35 @@ Authorization: Bearer {accessToken}
 }
 ```
 
-### Or fetch separately
-
-| Method | Endpoint | Use for |
-|--------|----------|---------|
-| GET | `/mobile/lookups/provinces` | Province dropdown |
-| GET | `/mobile/lookups/provinces/{provinceId}/districts` | Districts after province selected |
-| GET | `/mobile/lookups/applied-for` | Applied for dropdown |
-| GET | `/mobile/lookups/inspection-types` | Form **Status** field (New / Enhancement / …) |
-| GET | `/mobile/activity` | Optional: own audit trail (last 50 actions) |
-
 **UI flow:**
-1. Load lookups after login (or on New Inspection screen)
-2. User selects **Province** → filter/show its **Districts**
-3. User selects **Applied for** from list
-4. User selects **Status** from `inspectionTypes` → send as `type` field
 
-### Create / update with IDs (preferred)
-
-```json
-{
-  "instituteName": "Abc Nursing Institute",
-  "provinceId": "province-uuid",
-  "districtId": "district-uuid",
-  "appliedForId": "applied-for-uuid",
-  "type": "newInspection",
-  "principalName": "Dr. Sarah Ahmed",
-  "principalRegNo": "PN-4521",
-  "principalQualification": "MSN",
-  "inspectionDate": "2026-07-10"
-}
-```
-
-Server resolves IDs to names and stores both. You may still send `province` / `district` / `appliedFor` as strings, but **IDs are preferred**.
-
-**Note:** `type` on the form is the paper form “Status” (New / Enhancement / Re-inspection / Evening Shift).  
-Workflow status after submit (`submitted`, `approved`, …) is separate and read-only from the API.
+1. After login → load `/mobile/lookups` (cache in memory)
+2. User picks Province → show its `districts`
+3. User picks Applied for
+4. User picks Status from `inspectionTypes` → send `value` as `type`
 
 ---
 
-## 2c. Audit trail (automatic — no extra work required)
+## 7. Inspection APIs (details)
 
-Every mobile API action is **automatically logged on the server** (create, update, fee, requirement status, comments, attachments, signature, submit, login/logout).
-
-You do **not** need to call a separate “write audit” API.
-
-### Optional: view your own activity
-
-```
-GET /mobile/activity
-Authorization: Bearer {accessToken}
-```
-
-Returns the last 50 audit entries for the logged-in field user (read-only).
-
-Portal admins see all portal + mobile activity under **Audit Logs**, filterable by source (`mobile` / `portal`).
-
----
-
-## 2. Authentication APIs
-
-### 2.1 Login
-
-```
-POST /auth/login
-```
-
-**Request body:**
-```json
-{
-  "email": "inspector@pnmc.gov.pk",
-  "password": "Field@123",
-  "client": "mobile"
-}
-```
-
-> **Required:** always send `"client": "mobile"` from the Flutter app.  
-> Portal login uses `"client": "portal"` and **rejects** mobile field users.  
-> Mobile login rejects supervisor/admin accounts that are not `isMobileUser`.
-
-**Success response (200):**
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "uuid",
-    "email": "inspector@pnmc.gov.pk",
-    "fullName": "Field Inspector",
-    "employeeId": "INS-2026-0001",
-    "province": "Sindh",
-    "district": "Karachi Central",
-    "isMobileUser": true,
-    "roles": [
-      { "id": "uuid", "code": "field_inspector", "name": "Field Inspector" }
-    ],
-    "permissions": [
-      "mobile.inspections.view",
-      "mobile.inspections.create",
-      "mobile.inspections.update",
-      "mobile.inspections.submit"
-    ]
-  }
-}
-```
-
-**What to store on device:**
-- `accessToken` — send on every API call (expires in ~1 hour)
-- `refreshToken` — use to get a new access token (expires in ~7 days)
-- `user` object — for profile UI
-
-**Important:** If `isMobileUser` is `false`, do **not** use mobile inspection APIs (portal-only user).
-
----
-
-### 2.2 Refresh token
-
-```
-POST /auth/refresh
-```
-
-```json
-{
-  "refreshToken": "your-refresh-token"
-}
-```
-
-**Response:**
-```json
-{
-  "accessToken": "new-access-token..."
-}
-```
-
----
-
-### 2.3 Current user profile
-
-```
-GET /auth/me
-Authorization: Bearer {accessToken}
-```
-
-Returns the same `user` object as login (without tokens).
-
----
-
-### 2.4 Logout
-
-```
-POST /auth/logout
-Authorization: Bearer {accessToken}
-```
-
-Clear tokens from secure storage on the app side.
-
----
-
-## 3. Checklist template (master data)
-
-Fetch once when creating a new inspection (or cache and refresh periodically).
-
-```
-GET /checklist-templates/active
-```
-
-Returns the official **PNMC Recognition Checklist 2023** — **23 requirements**, Flags **B–X**, 4 categories:
-
-1. General Requirements (items 1–10)
-2. Faculty Details and Requirements (11–13)
-3. Proper Infrastructure (Building) Requirement (14–19)
-4. Details and requirements regarding clinical facilities (20–23)
-
-Item **#9 (Flag – J)** has `hasFeeDetails: true` — use the fee-details API for that item.
-
----
-
-## 4. Mobile inspection APIs
-
-All paths below are under:  
-`{BASE_URL}/mobile/...`  
-and require:  
-`Authorization: Bearer {accessToken}`
-
-### Rules (enforce in UI + server enforces too)
+### Rules
 
 | Rule | Detail |
 |------|--------|
-| Ownership | User only sees/edits **their own** inspections |
-| Partial save | Allowed while `draft`, `in_progress`, or `changes_requested` |
-| After submit | **View only** — no edit, no new attachments/comments |
-| Delete inspection | **Not allowed** — there is no delete-inspection API |
-| Delete attachment | Allowed only while form is still editable |
-| Submit | All 23 requirements must be `ok` or `reject` (not `pending`) |
+| Ownership | User only sees/edits **their own** forms |
+| Editable when | `draft`, `in_progress`, `changes_requested` |
+| After submit | **View only** |
+| Submit precondition | All 23 requirements must be `ok` or `reject` (not `pending`) |
+| Drive UI with | `canEdit`, `isSubmitted`, `status`, `supervisorRemarks` |
 
-Response always includes:
-- `canEdit` — `true` / `false` (drive UI enable/disable)
-- `isSubmitted` — whether form left draft/edit mode
-- `status` — workflow status (see section 6)
-- `supervisorRemarks` — after supervisor review
-
----
-
-### 4.1 List my inspections
+### 7.1 Create (preferred — use IDs)
 
 ```
-GET /mobile/inspections
+POST {BASE_URL}/mobile/inspections
+Authorization: Bearer {accessToken}
+Content-Type: application/json
 ```
 
-Returns an array of inspection objects (own forms only).
-
----
-
-### 4.2 Get one inspection (full form)
-
-```
-GET /mobile/inspections/{id}
-```
-
-Use this to:
-- Resume a draft
-- Show status after submit (`approved` / `rejected` / `changes_requested`)
-- Show supervisor remarks
-
----
-
-### 4.3 Create new inspection (registration)
-
-```
-POST /mobile/inspections
-```
-
-**Body (preferred — use IDs from lookups):**
 ```json
 {
   "instituteName": "Abc Nursing Institute",
@@ -390,257 +382,181 @@ POST /mobile/inspections
   "principalRegNo": "PN-4521",
   "principalQualification": "MSN",
   "inspectionDate": "2026-07-10",
-  "clientId": "optional-uuid-generated-on-device"
+  "clientId": "optional-device-uuid"
 }
 ```
 
-| Field | Required | Notes |
+| Field | Required | Limits |
 |-------|----------|--------|
-| `instituteName` | Yes | Institute name |
-| `provinceId` | Preferred | From `GET /mobile/lookups` |
-| `districtId` | Preferred | Must belong to selected province |
-| `appliedForId` | Preferred | From applied-for list |
-| `province` / `district` / `appliedFor` | Optional | String fallback if not using IDs |
-| `type` | Yes | From inspection-types lookup |
-| `principalName` | No | |
-| `principalRegNo` | No | |
-| `principalQualification` | No | |
-| `inspectionDate` | No | ISO date `YYYY-MM-DD` or full ISO datetime |
-| `clientId` | No | UUID from mobile for offline sync |
+| `instituteName` | Yes | 2–255 |
+| `provinceId` / `districtId` / `appliedForId` | Preferred | UUID |
+| `type` | Yes | enum below |
+| `principalName` | No | max 255 |
+| `principalRegNo` | No | max 100 |
+| `principalQualification` | No | max 255 |
+| `inspectionDate` | No | ISO date |
+| `clientId` | No | UUID for offline sync |
 
-**`type` allowed values:**
-- `newInspection` → New
-- `enhancement` → Enhancement
-- `reinspection` → Re-inspection
-- `eveningShift` → Evening Shift
+**`type` values:** `newInspection` | `enhancement` | `reinspection` | `eveningShift`
 
-**What server does:**
-1. Creates inspection with status `draft`
-2. Clones all **23** checklist requirement responses (`pending`)
-3. Creates empty fee-details record for Flag J
-4. Returns full inspection object with `inspectionCode` (e.g. `PNMC-2026-0001`)
+Server creates status `draft`, clones **23** checklist responses, creates empty fee-details for Flag J, returns `inspectionCode` (e.g. `PNMC-2026-0001`).
 
----
-
-### 4.4 Partial save (header / institute fields)
-
-Call anytime while editing — form can take multiple days.
+### 7.2 Partial save
 
 ```
-PATCH /mobile/inspections/{id}
+PATCH {BASE_URL}/mobile/inspections/{id}
 ```
 
-```json
-{
-  "instituteName": "Updated Name",
-  "district": "Lahore",
-  "province": "Punjab",
-  "appliedFor": "MSN",
-  "type": "enhancement",
-  "principalName": "...",
-  "principalRegNo": "...",
-  "principalQualification": "...",
-  "inspectionDate": "2026-07-11",
-  "finalRemarks": "Optional draft remarks"
-}
-```
+Any subset of header fields + optional `finalRemarks` (max 1000).  
+First meaningful update: `draft` → `in_progress`.
 
-All fields optional. Status moves `draft` → `in_progress` on first meaningful update.
-
----
-
-### 4.5 Save fee payment details (Requirement #9 / Flag – J)
+### 7.3 Fee details (Requirement #9 / Flag – J)
 
 ```
-PATCH /mobile/inspections/{id}/fee-details
+PATCH {BASE_URL}/mobile/inspections/{id}/fee-details
 ```
 
 ```json
 {
   "lineItems": [
     { "code": "BSN", "label": "BSN", "amount": 200000, "remainingFee": 0, "selected": true },
-    { "code": "APPLICATION_FEE", "label": "Application Fee", "amount": 50000, "remainingFee": 0, "selected": true },
-    { "code": "INSPECTION_FEE", "label": "Inspection Fee", "amount": 250000, "remainingFee": 0, "selected": true }
+    { "code": "APPLICATION_FEE", "label": "Application Fee", "amount": 50000, "remainingFee": 0, "selected": true }
   ],
-  "totalPayable": 500000,
-  "paidAmount": 500000,
+  "totalPayable": 250000,
+  "paidAmount": 250000,
   "challanReference": "CH-12345",
-  "bankAccount": "PK44MPBL9737477140108727",
-  "notes": "Original challan attached"
+  "bankAccount": "PK00XXXX",
+  "notes": "Challan attached"
 }
 ```
 
-Default fee line codes seeded by server:  
-`MSN`, `BSN`, `PRN`, `LHV`, `CMW`, `CNA`, `OTHER_DEGREE`, `OTHER_DIPLOMA`, `EVENING_SHIFT`, `ENHANCEMENT`, `INSPECTION_FEE`, `APPLICATION_FEE`
+Amounts: `0` … `99999999`. Max 50 line items.  
+Also upload challan via attachments on that requirement’s `responseId`.
 
-Also upload challan photo/PDF via the **attachments** API on that requirement’s `responseId`.
-
----
-
-### 4.6 Update requirement status (OK / N/A)
+### 7.4 Requirement status
 
 ```
-PATCH /mobile/inspections/{id}/requirements/{responseId}
-```
-
-```json
+PATCH {BASE_URL}/mobile/inspections/{id}/requirements/{responseId}
 { "status": "ok" }
 ```
 
-| Value | UI label | Meaning |
-|-------|----------|---------|
-| `pending` | Pending | Not reviewed yet |
-| `ok` | OK | Document provided |
-| `reject` | N/A | Document not provided |
+| Value | UI |
+|-------|-----|
+| `pending` | Pending |
+| `ok` | OK |
+| `reject` | N/A |
 
-`responseId` comes from `requirements[].id` in the inspection GET/create response.
-
----
-
-### 4.7 Add comment on a requirement
+### 7.5 Comment
 
 ```
-POST /mobile/inspections/{id}/requirements/{responseId}/comments
+POST {BASE_URL}/mobile/inspections/{id}/requirements/{responseId}/comments
+{ "text": "Verified against bank record." }
 ```
 
-```json
-{
-  "text": "Receipt verified against bank record."
-}
-```
+Max 2000 characters.
 
----
-
-### 4.8 Upload evidence (photo / PDF)
+### 7.6 Upload evidence
 
 ```
-POST /mobile/inspections/{id}/requirements/{responseId}/attachments
+POST {BASE_URL}/mobile/inspections/{id}/requirements/{responseId}/attachments
 Content-Type: multipart/form-data
 ```
 
 | Form field | Value |
 |------------|--------|
-| `file` | Binary file |
+| `file` | Binary JPEG / PNG / PDF ≤ 10 MB |
 
-**Allowed:** JPEG, PNG, PDF  
-**Max size:** 10 MB
-
-Response returns updated inspection with attachment `url`.
-
----
-
-### 4.9 Delete an attachment (before submit only)
+### 7.7 Delete attachment
 
 ```
-DELETE /mobile/inspections/{id}/attachments/{attachmentId}
+DELETE {BASE_URL}/mobile/inspections/{id}/attachments/{attachmentId}
 ```
 
----
+Only while form is editable.
 
-### 4.10 Upload digital signature
+### 7.8 Signature
 
 ```
-POST /mobile/inspections/{id}/signature
+POST {BASE_URL}/mobile/inspections/{id}/signature
 Content-Type: multipart/form-data
 ```
 
 | Form field | Value |
 |------------|--------|
-| `file` | Signature PNG/JPEG |
+| `file` | PNG / JPEG ≤ 512 KB |
 
-**Max size:** 500 KB
+### 7.9 Submit
+
+```
+POST {BASE_URL}/mobile/inspections/{id}/submit
+{ "finalRemarks": "Optional remarks (max 1000)" }
+```
+
+After success: `status` → `submitted` (or `resubmitted`), `canEdit` → `false`.  
+Form appears in supervisor portal for review.
+
+### 7.10 Signed file URLs
+
+Attachment / signature URLs look like:
+
+```
+http://119.30.113.24:3001/api/v1/files/inspections/{id}/.../file.jpg?exp=...&sig=...
+```
+
+- Do **not** strip `exp` / `sig`
+- Links expire (~1 hour) — re-fetch inspection if image fails to load
 
 ---
 
-### 4.11 Submit final report
-
-```
-POST /mobile/inspections/{id}/submit
-```
-
-```json
-{
-  "finalRemarks": "Institute meets most requirements. Corrective action needed for hostel sanitation."
-}
-```
-
-`finalRemarks` is optional but recommended (max 1000 chars).
-
-**Preconditions (server validates):**
-- All 23 requirements are `ok` or `reject` (none `pending`)
-- Form is still editable
-
-**After success:**
-- `status` → `submitted` (or `resubmitted` if coming from `changes_requested`)
-- `canEdit` → `false`
-- Form appears in supervisor portal queue
-
----
-
-## 5. Suggested mobile app flow
-
-```
-Login
-  → GET /mobile/lookups                    (cache provinces, districts, applied-for, types)
-  → Dashboard: GET /mobile/inspections
-  → FAB New:
-        Show dropdowns from lookups
-        POST /mobile/inspections  (with provinceId, districtId, appliedForId, type)
-        → Fill checklist → PATCH / partial save anytime
-        → POST submit
-  → After submit: GET only — show workflow status + supervisorRemarks
-```
-
----
-
-## 6. Inspection status values
+## 8. Status values
 
 | Status | Meaning | Mobile can edit? |
 |--------|---------|------------------|
 | `draft` | Just created | Yes |
 | `in_progress` | Partially filled | Yes |
-| `submitted` | Waiting for supervisor | No (view only) |
-| `under_review` | Supervisor opened it | No |
+| `submitted` | Waiting for supervisor | No |
+| `under_review` | Supervisor reviewing | No |
 | `approved` | Accepted | No |
 | `rejected` | Rejected | No |
-| `changes_requested` | Supervisor asked for fixes | Yes |
-| `resubmitted` | Sent again after changes | No |
+| `changes_requested` | Fix and resubmit | Yes |
+| `resubmitted` | Sent again | No |
 
-Always trust `canEdit` from the API for enabling/disabling form controls.
+Always trust **`canEdit`** from the API.
 
 ---
 
-## 7. Example cURL (quick test)
+## 9. Suggested Flutter flow
 
-```bash
-# 1) Login
-curl -X POST http://localhost:3001/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"inspector@pnmc.gov.pk\",\"password\":\"Field@123\",\"client\":\"mobile\"}"
-
-# 2) Create inspection (replace TOKEN)
-curl -X POST http://localhost:3001/api/v1/mobile/inspections \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"instituteName\":\"Test Institute\",\"district\":\"Karachi\",\"province\":\"Sindh\",\"appliedFor\":\"BSN\",\"type\":\"newInspection\"}"
-
-# 3) List mine
-curl http://localhost:3001/api/v1/mobile/inspections \
-  -H "Authorization: Bearer TOKEN"
+```
+1. Login  POST /auth/login  { client: "mobile" }
+2. Save accessToken + refreshToken + user  (secure storage)
+3. GET /mobile/lookups  (cache)
+4. Dashboard  GET /mobile/inspections
+5. New inspection:
+     show dropdowns from lookups
+     POST /mobile/inspections
+     PATCH partial saves while filling
+     PATCH requirements / fee / comments
+     POST attachments / signature
+     POST submit
+6. After submit: GET only — show status + supervisorRemarks
+7. On 401: refresh → retry; if fail → logout
 ```
 
 ---
 
-## 8. Error handling
+## 10. Errors
 
-| HTTP | Meaning |
-|------|---------|
-| 400 | Validation failed (e.g. pending requirements on submit) |
-| 401 | Missing/invalid/expired token → refresh or re-login |
-| 403 | Not a mobile user, or not owner, or form locked |
-| 404 | Inspection / requirement / attachment not found |
+| HTTP | Meaning | App action |
+|------|---------|------------|
+| 400 | Validation failed | Show `message` |
+| 401 | Token missing/expired/invalid | Refresh or re-login |
+| 403 | Not mobile user / not owner / form locked | Show message |
+| 404 | Not found | Show message |
+| 429 | Rate limited | Wait and retry |
 
-Error body typically:
+Typical body:
+
 ```json
 {
   "statusCode": 403,
@@ -650,25 +566,67 @@ Error body typically:
 
 ---
 
-## 9. Checklist for Flutter integration
+## 11. Quick cURL tests (live IP)
 
-1. Replace demo login with `POST /auth/login`
-2. Store JWT in `flutter_secure_storage`
-3. Attach `Authorization: Bearer ...` on all `/mobile/*` calls
-4. On 401 → try refresh → else logout
-5. Migrate local `SharedPreferences` drafts to server via create + PATCH
-6. Upload photos as multipart (not local paths)
-7. Use `canEdit` / `status` from API for UI state
-8. Show supervisor decision (`approved` / `rejected` / `changes_requested` + remarks)
-9. Audit logging is server-side — no write API needed; optional `GET /mobile/activity` for own history
-10. Enforce email regex, secure token storage, refresh rotation, and signed file URLs (see §1b)
+```bash
+BASE=http://119.30.113.24:3001/api/v1
+
+# Login
+curl -s -X POST $BASE/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"inspector@pnmc.gov.pk","password":"Field@123","client":"mobile"}'
+
+# List (replace TOKEN)
+curl -s $BASE/mobile/inspections \
+  -H "Authorization: Bearer TOKEN"
+
+# Lookups
+curl -s $BASE/mobile/lookups \
+  -H "Authorization: Bearer TOKEN"
+```
+
+When domain is live, replace host with `pnmc.esspl.com.pk`.
 
 ---
 
-## 10. Contacts / notes
+## 12. Flutter integration checklist
 
-- Interactive API docs: `http://localhost:3001/docs` (Swagger)
-- Portal supervisors review submitted forms and approve/reject; mobile sees the updated status on next GET
-- Production base URL will be shared separately when deployed (same paths under `/api/v1`)
+1. [ ] Set `baseUrl` to `http://119.30.113.24:3001/api/v1`
+2. [ ] Login with `"client": "mobile"`
+3. [ ] Store tokens in `flutter_secure_storage`
+4. [ ] Attach `Authorization: Bearer …` on all `/mobile/*` calls
+5. [ ] On 401 → refresh (save **both** new tokens) → else logout
+6. [ ] Use lookups for Province / District / Applied for / Status
+7. [ ] Prefer `provinceId`, `districtId`, `appliedForId` on create
+8. [ ] Partial save with PATCH while filling
+9. [ ] Upload files as multipart field name `file`
+10. [ ] Keep signed URL query params for images
+11. [ ] Use `canEdit` / `status` / `supervisorRemarks` for UI
+12. [ ] When domain is ready → change only `baseUrl` to `http://pnmc.esspl.com.pk:3001/api/v1`
+13. [ ] When HTTPS is ready → switch to `https://pnmc.esspl.com.pk/api/v1` (port may change if reverse-proxied)
 
-If anything is unclear, ask backend for a sample Postman collection or a live walkthrough of one full create → fill → submit cycle.
+---
+
+## 13. What is NOT provided (by design)
+
+| Item | Status |
+|------|--------|
+| Static API key / app secret | **Not used** — JWT only |
+| Delete inspection API | **Not available** |
+| Portal login for field users | **Blocked** |
+| Hardcoded location lists | **Do not hardcode** — use lookups |
+
+---
+
+## 14. Contacts / notes
+
+- Live API (now): `http://119.30.113.24:3001/api/v1`
+- Domain (soon): `pnmc.esspl.com.pk` — same API paths under `/api/v1`
+- Portal for supervisors: port `3000` on the same host
+- All mobile actions are audited automatically on the server
+- If anything is unclear, request a Postman collection or a live walkthrough of:  
+  **login → lookups → create → fill → attach → submit → status**
+
+---
+
+**End of handoff — Mobile Field Inspector API v1**
