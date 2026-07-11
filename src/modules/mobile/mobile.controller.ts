@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -14,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { InspectionsService } from '../inspections/inspections.service';
 import {
   CreateInspectionDto,
@@ -38,6 +40,8 @@ type AuthReq = {
   protocol: string;
   get: (h: string) => string;
 };
+
+const uuid = () => new ParseUUIDPipe({ version: '4' });
 
 @ApiTags('Mobile — Field Inspector')
 @ApiBearerAuth()
@@ -65,8 +69,6 @@ export class MobileController {
     }
   }
 
-  // ── Lookups for form dropdowns ─────────────────────────────
-
   @Get('lookups')
   @RequirePermissions('mobile.inspections.view')
   lookups(@Req() req: AuthReq) {
@@ -86,7 +88,7 @@ export class MobileController {
   @Get('lookups/provinces/:provinceId/districts')
   @RequirePermissions('mobile.inspections.view')
   districtsByProvince(
-    @Param('provinceId') provinceId: string,
+    @Param('provinceId', uuid()) provinceId: string,
     @Req() req: AuthReq,
   ) {
     this.assertMobileUser(req);
@@ -133,7 +135,7 @@ export class MobileController {
 
   @Get('inspections/:id')
   @RequirePermissions('mobile.inspections.view')
-  getOne(@Param('id') id: string, @Req() req: AuthReq) {
+  getOne(@Param('id', uuid()) id: string, @Req() req: AuthReq) {
     this.assertMobileUser(req);
     return this.inspectionsService.findOneForOwner(
       id,
@@ -154,11 +156,10 @@ export class MobileController {
     );
   }
 
-  /** Partial save — institute / principal header fields */
   @Patch('inspections/:id')
   @RequirePermissions('mobile.inspections.update')
   update(
-    @Param('id') id: string,
+    @Param('id', uuid()) id: string,
     @Body() dto: UpdateInspectionDto,
     @Req() req: AuthReq,
   ) {
@@ -175,7 +176,7 @@ export class MobileController {
   @Patch('inspections/:id/fee-details')
   @RequirePermissions('mobile.inspections.update')
   updateFee(
-    @Param('id') id: string,
+    @Param('id', uuid()) id: string,
     @Body() dto: UpdateFeeDetailsDto,
     @Req() req: AuthReq,
   ) {
@@ -192,8 +193,8 @@ export class MobileController {
   @Patch('inspections/:id/requirements/:responseId')
   @RequirePermissions('mobile.inspections.update')
   updateRequirement(
-    @Param('id') id: string,
-    @Param('responseId') responseId: string,
+    @Param('id', uuid()) id: string,
+    @Param('responseId', uuid()) responseId: string,
     @Body() dto: UpdateRequirementDto,
     @Req() req: AuthReq,
   ) {
@@ -211,8 +212,8 @@ export class MobileController {
   @Post('inspections/:id/requirements/:responseId/comments')
   @RequirePermissions('mobile.inspections.update')
   addComment(
-    @Param('id') id: string,
-    @Param('responseId') responseId: string,
+    @Param('id', uuid()) id: string,
+    @Param('responseId', uuid()) responseId: string,
     @Body() dto: AddCommentDto,
     @Req() req: AuthReq,
   ) {
@@ -229,11 +230,16 @@ export class MobileController {
 
   @Post('inspections/:id/requirements/:responseId/attachments')
   @RequirePermissions('mobile.inspections.update')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    }),
+  )
   addAttachment(
-    @Param('id') id: string,
-    @Param('responseId') responseId: string,
+    @Param('id', uuid()) id: string,
+    @Param('responseId', uuid()) responseId: string,
     @UploadedFile() file: Express.Multer.File,
     @Req() req: AuthReq,
   ) {
@@ -251,8 +257,8 @@ export class MobileController {
   @Delete('inspections/:id/attachments/:attachmentId')
   @RequirePermissions('mobile.inspections.update')
   removeAttachment(
-    @Param('id') id: string,
-    @Param('attachmentId') attachmentId: string,
+    @Param('id', uuid()) id: string,
+    @Param('attachmentId', uuid()) attachmentId: string,
     @Req() req: AuthReq,
   ) {
     this.assertMobileUser(req);
@@ -267,10 +273,15 @@ export class MobileController {
 
   @Post('inspections/:id/signature')
   @RequirePermissions('mobile.inspections.update')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 512 * 1024, files: 1 },
+    }),
+  )
   uploadSignature(
-    @Param('id') id: string,
+    @Param('id', uuid()) id: string,
     @UploadedFile() file: Express.Multer.File,
     @Req() req: AuthReq,
   ) {
@@ -287,7 +298,7 @@ export class MobileController {
   @Post('inspections/:id/submit')
   @RequirePermissions('mobile.inspections.submit')
   submit(
-    @Param('id') id: string,
+    @Param('id', uuid()) id: string,
     @Body() dto: SubmitInspectionDto,
     @Req() req: AuthReq,
   ) {
@@ -301,7 +312,6 @@ export class MobileController {
     );
   }
 
-  /** Own activity history (read-only) */
   @Get('activity')
   @RequirePermissions('mobile.inspections.view')
   activity(@Req() req: AuthReq) {

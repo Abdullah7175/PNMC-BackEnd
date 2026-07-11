@@ -4,24 +4,39 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import {
+  STRICT_EMAIL_MESSAGE,
+  STRICT_EMAIL_REGEX,
+  STRONG_PASSWORD_MESSAGE,
+  STRONG_PASSWORD_REGEX,
+} from '../../../common/validation/security.constants';
 
 export class CreateRoleDto {
   @ApiProperty()
   @IsString()
   @MinLength(2)
+  @MaxLength(50)
+  @Matches(/^[a-z][a-z0-9_]*$/, {
+    message: 'Role code must be lowercase letters, numbers, underscores',
+  })
   code: string;
 
   @ApiProperty()
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -35,11 +50,14 @@ export class UpdateRoleDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -52,23 +70,31 @@ export class UpdateRoleDto {
 export class CreatePermissionDto {
   @ApiProperty()
   @IsString()
+  @MaxLength(100)
+  @Matches(/^[a-z][a-z0-9._-]*$/, {
+    message: 'Permission code must be lowercase with dots (e.g. users.view)',
+  })
   code: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(150)
   name: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(50)
   page: string;
 
   @ApiProperty()
   @IsString()
+  @MaxLength(50)
   action: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 }
 
@@ -76,56 +102,74 @@ export class UpdatePermissionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  @Matches(/^[a-z][a-z0-9._-]*$/, {
+    message: 'Permission code must be lowercase with dots (e.g. users.view)',
+  })
   code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(150)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   page?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   action?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 }
 
 export class CreateUserDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'user@pnmc.gov.pk' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsString()
+  @MaxLength(255)
+  @Matches(STRICT_EMAIL_REGEX, { message: STRICT_EMAIL_MESSAGE })
   email: string;
 
   @ApiProperty()
   @IsString()
-  @MinLength(6)
+  @Matches(STRONG_PASSWORD_REGEX, { message: STRONG_PASSWORD_MESSAGE })
   password: string;
 
   @ApiProperty()
   @IsString()
+  @MinLength(2)
+  @MaxLength(255)
   fullName: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   employeeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   province?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   district?: string;
 
   @ApiPropertyOptional({
@@ -146,21 +190,26 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(255)
   fullName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   employeeId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   province?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   district?: string;
 
   @ApiPropertyOptional()
@@ -182,6 +231,6 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MinLength(6)
+  @Matches(STRONG_PASSWORD_REGEX, { message: STRONG_PASSWORD_MESSAGE })
   password?: string;
 }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { InspectionsModule } from './modules/inspections/inspections.module';
@@ -26,10 +27,18 @@ import { AppliedForCategory } from './entities/applied-for-category.entity';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { FilesModule } from './modules/files/files.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 120,
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -57,6 +66,7 @@ import { AuditModule } from './modules/audit/audit.module';
       }),
     }),
     StorageModule,
+    FilesModule,
     AuditModule,
     AuthModule,
     AdminModule,
@@ -67,6 +77,7 @@ import { AuditModule } from './modules/audit/audit.module';
     MobileModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

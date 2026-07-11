@@ -1,13 +1,19 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -18,36 +24,42 @@ import { RequirementStatus } from '../../../common/enums/requirement.enum';
 export class CreateInspectionDto {
   @ApiProperty({ example: 'Abc Nursing Institute' })
   @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(255)
   instituteName: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   district?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   province?: string;
 
   @ApiPropertyOptional({ description: 'Preferred: province UUID from lookups' })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   provinceId?: string;
 
   @ApiPropertyOptional({ description: 'Preferred: district UUID from lookups' })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   districtId?: string;
 
   @ApiPropertyOptional({ example: 'BSN' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   appliedFor?: string;
 
   @ApiPropertyOptional({ description: 'Preferred: applied-for UUID from lookups' })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   appliedForId?: string;
 
   @ApiProperty({
@@ -60,16 +72,19 @@ export class CreateInspectionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   principalName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   principalRegNo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   principalQualification?: string;
 
   @ApiPropertyOptional()
@@ -79,7 +94,7 @@ export class CreateInspectionDto {
 
   @ApiPropertyOptional({ description: 'Client-generated UUID for offline sync' })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   clientId?: string;
 }
 
@@ -87,36 +102,41 @@ export class UpdateInspectionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(255)
   instituteName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   district?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   province?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   provinceId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   districtId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   appliedFor?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   appliedForId?: string;
 
   @ApiPropertyOptional({ enum: InspectionType })
@@ -127,16 +147,19 @@ export class UpdateInspectionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   principalName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   principalRegNo?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   principalQualification?: string;
 
   @ApiPropertyOptional()
@@ -160,6 +183,8 @@ export class UpdateRequirementDto {
 export class AddCommentDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(1)
   @MaxLength(2000)
   text: string;
 }
@@ -167,20 +192,28 @@ export class AddCommentDto {
 export class FeeLineItemDto {
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
   code: string;
 
   @ApiProperty()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   label: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99_999_999)
   amount?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99_999_999)
   remainingFee?: number | null;
 
   @ApiPropertyOptional()
@@ -193,33 +226,41 @@ export class UpdateFeeDetailsDto {
   @ApiPropertyOptional({ type: [FeeLineItemDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => FeeLineItemDto)
   lineItems?: FeeLineItemDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99_999_999)
   totalPayable?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99_999_999)
   paidAmount?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   challanReference?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   bankAccount?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   notes?: string | null;
 }
 
@@ -233,7 +274,7 @@ export class SubmitInspectionDto {
 
 export class SupervisorReviewDto {
   @ApiProperty({ enum: ['approve', 'reject', 'request_changes'] })
-  @IsString()
+  @IsIn(['approve', 'reject', 'request_changes'])
   action: 'approve' | 'reject' | 'request_changes';
 
   @ApiPropertyOptional()
@@ -245,11 +286,11 @@ export class SupervisorReviewDto {
 
 export class AssignInspectionDto {
   @ApiProperty()
-  @IsUUID()
+  @IsUUID('4')
   inspectorId: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   supervisorId?: string;
 }

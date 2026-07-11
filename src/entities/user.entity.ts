@@ -30,6 +30,10 @@ export class User extends BaseEntity {
   @Column({ name: 'is_mobile_user', default: false })
   isMobileUser: boolean;
 
+  /** Hashed refresh token for rotation / revocation (OWASP) */
+  @Column({ name: 'refresh_token_hash', type: 'varchar', length: 255, nullable: true })
+  refreshTokenHash: string | null;
+
   @ManyToMany(() => Role, (role) => role.users, { eager: true })
   @JoinTable({
     name: 'user_roles',

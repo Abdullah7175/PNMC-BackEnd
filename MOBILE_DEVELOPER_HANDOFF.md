@@ -20,6 +20,84 @@
 
 > There is **no static API key**. The mobile app logs in and receives a JWT. Store tokens in `flutter_secure_storage`.
 
+---
+
+## 1b. Security requirements (OWASP — required for mobile)
+
+### Email format (login & accounts)
+
+Only letters, numbers, `@`, and `.` are allowed:
+
+```
+admin@admin.com          ✅
+inspector@pnmc.gov.pk    ✅
+user+tag@mail.com        ❌  (+ not allowed)
+user_name@mail.com       ❌  (_ not allowed)
+```
+
+Regex:
+
+```
+^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*@[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$
+```
+
+Invalid emails return **400** with a validation message (not a vague login error).
+
+### Login / tokens
+
+| Rule | Detail |
+|------|--------|
+| Rate limit | Max **10 login** attempts / minute / IP |
+| Access token | Short-lived JWT (~15m). Send as `Authorization: Bearer …` |
+| Refresh token | Opaque token; **rotated** on every `POST /auth/refresh`. Old token becomes invalid. |
+| Logout | Call `POST /auth/logout` with Bearer token — server **revokes** refresh token |
+| Storage | Use `flutter_secure_storage` only — never SharedPreferences for tokens |
+
+### Refresh
+
+```
+POST /auth/refresh
+{ "refreshToken": "…" }
+```
+
+**Response** includes a **new** `accessToken` and a **new** `refreshToken`. Always replace both locally.
+
+### Input validation (all mobile write APIs)
+
+Server rejects oversized / invalid payloads with **400**:
+
+| Field | Limits |
+|-------|--------|
+| `instituteName` | required, 2–255 chars |
+| `province` / `district` / `appliedFor` (strings) | max 100 |
+| `principalName` / qualification | max 255 |
+| `principalRegNo` | max 100 |
+| `finalRemarks` / comments | max 1000 / 2000 |
+| Fee amounts | 0 … 99,999,999 ; max 50 line items |
+| Path IDs | must be UUID v4 |
+| Extra JSON fields | **rejected** (`forbidNonWhitelisted`) |
+
+### File uploads
+
+| Rule | Value |
+|------|--------|
+| Evidence | JPEG / PNG / PDF, max **10 MB**, magic-byte checked |
+| Signature | JPEG / PNG, max **512 KB** |
+| Field name | `file` (multipart) |
+| Rate limit | Uploads throttled |
+
+### Attachment / signature URLs
+
+URLs returned by the API are **signed and time-limited** (≈1 hour):
+
+```
+https://host/api/v1/files/inspections/.../file.jpg?exp=…&sig=…
+```
+
+- Do **not** strip `exp` / `sig` query params.
+- Do **not** assume `/files/…` works without the signature.
+- Re-fetch the inspection if a link expires (401/403 on image load).
+
 ### Demo field inspector account (mobile user)
 
 | Field | Value |
@@ -583,6 +661,7 @@ Error body typically:
 7. Use `canEdit` / `status` from API for UI state
 8. Show supervisor decision (`approved` / `rejected` / `changes_requested` + remarks)
 9. Audit logging is server-side — no write API needed; optional `GET /mobile/activity` for own history
+10. Enforce email regex, secure token storage, refresh rotation, and signed file URLs (see §1b)
 
 ---
 

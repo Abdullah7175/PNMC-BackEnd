@@ -8,7 +8,10 @@ import { MobileController } from './mobile.controller';
 
 @Module({
   imports: [
-    MulterModule.register({ storage: memoryStorage() }),
+    MulterModule.register({
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    }),
     InspectionsModule,
     MasterDataModule,
     AuditModule,

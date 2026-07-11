@@ -2,19 +2,19 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
 import { User } from '../../entities/user.entity';
 import { LoginClient, LoginDto } from './dto/login.dto';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -23,8 +23,54 @@ export class AuthService implements OnModuleInit {
     private readonly auditService: AuditService,
   ) {}
 
-  async onModuleInit() {
-    // Ensure default admin exists after migrations/seed
+  private hashToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async issueTokens(user: User) {
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!jwtSecret || !refreshSecret) {
+      throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be configured');
+    }
+
+    const payload = { sub: user.id, email: user.email };
+    const accessToken = this.jwtService.sign(payload, {
+      secret: jwtSecret,
+      expiresIn: this.configService.get('JWT_EXPIRES_IN') ?? '15m',
+    });
+
+    // Opaque refresh token (not a JWT) — stored hashed for revocation
+    const refreshToken = randomBytes(48).toString('base64url');
+    user.refreshTokenHash = this.hashToken(refreshToken);
+    await this.userRepository.save(user);
+
+    return { accessToken, refreshToken };
+  }
+
+  private buildUserResponse(user: User) {
+    const permissions = new Set<string>();
+    for (const role of user.roles ?? []) {
+      for (const perm of role.permissions ?? []) {
+        permissions.add(perm.code);
+      }
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      employeeId: user.employeeId,
+      province: user.province,
+      district: user.district,
+      isMobileUser: user.isMobileUser,
+      roles: user.roles.map((r) => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+      })),
+      permissions: Array.from(permissions),
+    };
   }
 
   async login(dto: LoginDto) {
@@ -37,6 +83,14 @@ export class AuthService implements OnModuleInit {
     });
 
     if (!user) {
+      try {
+        await bcrypt.compare(
+          dto.password,
+          '$2b$10$abcdefghijklmnopqrstuuV6Y5Y5Y5Y5Y5Y5Y5Y5Y5Y5Y5Y5Y5Yu',
+        );
+      } catch {
+        /* ignore — timing pad only */
+      }
       await this.auditService.log({
         entityType: 'auth',
         action: 'login_failed',
@@ -94,19 +148,7 @@ export class AuthService implements OnModuleInit {
       );
     }
 
-    const permissions = new Set<string>();
-    for (const role of user.roles ?? []) {
-      for (const perm of role.permissions ?? []) {
-        permissions.add(perm.code);
-      }
-    }
-
-    const payload = { sub: user.id, email: user.email };
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN') ?? '7d',
-    });
+    const tokens = await this.issueTokens(user);
 
     await this.auditService.log({
       entityType: 'auth',
@@ -125,27 +167,13 @@ export class AuthService implements OnModuleInit {
     });
 
     return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        employeeId: user.employeeId,
-        province: user.province,
-        district: user.district,
-        isMobileUser: user.isMobileUser,
-        roles: user.roles.map((r) => ({
-          id: r.id,
-          code: r.code,
-          name: r.name,
-        })),
-        permissions: Array.from(permissions),
-      },
+      ...tokens,
+      user: this.buildUserResponse(user),
     };
   }
 
   async logout(userId: string, source: 'portal' | 'mobile' = 'portal') {
+    await this.userRepository.update(userId, { refreshTokenHash: null });
     await this.auditService.log({
       entityType: 'auth',
       entityId: userId,
@@ -158,18 +186,26 @@ export class AuthService implements OnModuleInit {
   }
 
   async refresh(refreshToken: string) {
-    try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get('JWT_REFRESH_SECRET'),
-      });
-      const accessToken = this.jwtService.sign({
-        sub: payload.sub,
-        email: payload.email,
-      });
-      return { accessToken };
-    } catch {
+    if (!refreshToken || refreshToken.length > 2000) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    const hash = this.hashToken(refreshToken);
+    const user = await this.userRepository.findOne({
+      where: { refreshTokenHash: hash, isActive: true },
+      relations: { roles: { permissions: true } },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Rotate refresh token (OWASP — prevent reuse)
+    const tokens = await this.issueTokens(user);
+    return {
+      ...tokens,
+      user: this.buildUserResponse(user),
+    };
   }
 
   async getProfile(userId: string) {
@@ -178,28 +214,6 @@ export class AuthService implements OnModuleInit {
       relations: { roles: { permissions: true } },
     });
     if (!user) throw new UnauthorizedException();
-
-    const permissions = new Set<string>();
-    for (const role of user.roles ?? []) {
-      for (const perm of role.permissions ?? []) {
-        permissions.add(perm.code);
-      }
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      employeeId: user.employeeId,
-      province: user.province,
-      district: user.district,
-      isMobileUser: user.isMobileUser,
-      roles: user.roles.map((r) => ({
-        id: r.id,
-        code: r.code,
-        name: r.name,
-      })),
-      permissions: Array.from(permissions),
-    };
+    return this.buildUserResponse(user);
   }
 }

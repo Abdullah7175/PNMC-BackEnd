@@ -4,6 +4,18 @@ Base URL: `http://localhost:3001/api/v1`
 
 Auth: `Authorization: Bearer {accessToken}`
 
+## Security (required)
+
+- **Email:** letters, numbers, `@`, `.` only — e.g. `admin@admin.com`  
+  Regex: `^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*@[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$`
+- **Login rate limit:** 10 / minute
+- **Refresh tokens rotate** — always save the new refresh token from `/auth/refresh`
+- **Logout** revokes refresh token server-side
+- Store tokens in `flutter_secure_storage`
+- All write bodies are validated (max lengths, UUID paths, no unknown fields)
+- Uploads: JPEG/PNG/PDF evidence ≤10MB; signature JPEG/PNG ≤512KB; content verified
+- File URLs are **signed** (`?exp=&sig=`) — do not strip query params; refresh inspection if expired
+
 ## Login
 
 ```
@@ -12,6 +24,15 @@ POST /auth/login
 ```
 
 Always send `"client": "mobile"`. Portal login (`client: "portal"`) blocks field users.
+
+## Refresh
+
+```
+POST /auth/refresh
+{ "refreshToken": "…" }
+```
+
+Returns new `accessToken` + new `refreshToken` (rotation).
 
 ## Activity (optional)
 
@@ -46,12 +67,12 @@ Returns provinces (with nested districts), applied-for categories, and inspectio
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/mobile/inspections` | Own list |
-| GET | `/mobile/inspections/:id` | Full form |
-| POST | `/mobile/inspections` | Create (prefer IDs) |
+| GET | `/mobile/inspections/:id` | Full form (UUID) |
+| POST | `/mobile/inspections` | Create (prefer IDs; validated lengths) |
 | PATCH | `/mobile/inspections/:id` | Partial save |
-| PATCH | `/mobile/inspections/:id/fee-details` | Fee table |
+| PATCH | `/mobile/inspections/:id/fee-details` | Fee table (amounts ≥ 0) |
 | PATCH | `/mobile/inspections/:id/requirements/:responseId` | ok / reject |
-| POST | `.../comments` | Comment |
+| POST | `.../comments` | Comment ≤ 2000 chars |
 | POST | `.../attachments` | multipart `file` |
 | DELETE | `.../attachments/:attachmentId` | Before submit |
 | POST | `/mobile/inspections/:id/signature` | Signature |

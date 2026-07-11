@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -12,11 +13,13 @@ export class CreateProvinceDto {
   @ApiProperty({ example: 'Sindh' })
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional({ example: 'SD' })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   code?: string;
 
   @ApiPropertyOptional()
@@ -35,11 +38,13 @@ export class UpdateProvinceDto {
   @IsOptional()
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   code?: string;
 
   @ApiPropertyOptional()
@@ -61,11 +66,13 @@ export class CreateDistrictDto {
   @ApiProperty({ example: 'Karachi Central' })
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   code?: string;
 
   @ApiPropertyOptional()
@@ -89,11 +96,13 @@ export class UpdateDistrictDto {
   @IsOptional()
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   code?: string;
 
   @ApiPropertyOptional()
@@ -111,16 +120,19 @@ export class CreateAppliedForDto {
   @ApiProperty({ example: 'BSN' })
   @IsString()
   @MinLength(1)
+  @MaxLength(100)
   name: string;
 
   @ApiProperty({ example: 'BSN' })
   @IsString()
   @MinLength(1)
+  @MaxLength(50)
   code: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @ApiPropertyOptional()
@@ -138,16 +150,19 @@ export class UpdateAppliedForDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @ApiPropertyOptional()
