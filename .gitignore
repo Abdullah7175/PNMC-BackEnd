@@ -1,0 +1,28 @@
+# compiled / deps
+/node_modules
+/dist
+/build
+/coverage
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# uploads
+/uploads
+
+# logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# TypeScript
+*.tsbuildinfo
