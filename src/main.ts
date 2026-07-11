@@ -63,8 +63,9 @@ async function bootstrap() {
   }
 
   const port = config.get('PORT') ?? 3001;
-  await app.listen(port);
-  console.log(`PNMC API running on http://localhost:${port}`);
+  const host = config.get('HOST') ?? '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`PNMC API running on http://${host}:${port}`);
   if (!isProd || config.get('ENABLE_SWAGGER') === 'true') {
     console.log(`Swagger docs: http://localhost:${port}/docs`);
   }
