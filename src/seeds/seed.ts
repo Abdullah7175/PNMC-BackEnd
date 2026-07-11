@@ -259,6 +259,11 @@ async function seed() {
         passwordHash: fieldHash,
         fullName: 'Field Inspector',
         employeeId: 'INS-2026-0001',
+        phone: '03001234567',
+        nic: '42101-1234567-1',
+        designation: 'Field Inspector',
+        address: 'Karachi Central, Sindh',
+        officeDetails: 'PNMC Regional Office — Karachi',
         province: 'Sindh',
         district: 'Karachi Central',
         isMobileUser: true,
@@ -270,6 +275,12 @@ async function seed() {
     fieldUser.isActive = true;
     fieldUser.isMobileUser = true;
     fieldUser.roles = [fieldRole];
+    if (!fieldUser.phone) fieldUser.phone = '03001234567';
+    if (!fieldUser.nic) fieldUser.nic = '42101-1234567-1';
+    if (!fieldUser.designation) fieldUser.designation = 'Field Inspector';
+    if (!fieldUser.address) fieldUser.address = 'Karachi Central, Sindh';
+    if (!fieldUser.officeDetails)
+      fieldUser.officeDetails = 'PNMC Regional Office — Karachi';
     await userRepo.save(fieldUser);
   }
 

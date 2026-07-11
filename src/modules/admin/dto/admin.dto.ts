@@ -154,11 +154,52 @@ export class CreateUserDto {
   @MaxLength(255)
   fullName: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Work / employee identity number' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   employeeId?: string;
+
+  @ApiPropertyOptional({ example: '03001234567' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^[0-9+\-\s()]*$/, {
+    message: 'Phone may only contain digits and + - ( ) spaces',
+  })
+  phone?: string;
+
+  @ApiPropertyOptional({
+    description: 'National Identity Card (CNIC / NIC)',
+    example: '42101-1234567-1',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  nic?: string;
+
+  @ApiPropertyOptional({
+    description: 'Position / designation',
+    example: 'Field Inspector',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  designation?: string;
+
+  @ApiPropertyOptional({ description: 'Residential / postal address' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
+
+  @ApiPropertyOptional({
+    description: 'Office name, location, or other office details',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  officeDetails?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -194,11 +235,44 @@ export class UpdateUserDto {
   @MaxLength(255)
   fullName?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Work / employee identity number' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   employeeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^[0-9+\-\s()]*$/, {
+    message: 'Phone may only contain digits and + - ( ) spaces',
+  })
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'National Identity Card (CNIC / NIC)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  nic?: string;
+
+  @ApiPropertyOptional({ description: 'Position / designation' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  designation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  officeDetails?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

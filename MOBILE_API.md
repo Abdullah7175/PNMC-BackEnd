@@ -12,6 +12,11 @@
 **Demo mobile user:** `inspector@pnmc.gov.pk` / `Field@123`  
 **Login must include:** `"client": "mobile"`
 
+### User profile (login / me / refresh)
+
+Returned on `user` object: `fullName`, `phone`, `nic`, `employeeId` (work ID), `designation`, `address`, `officeDetails`, `province`, `district`, plus roles/permissions.  
+Display-only on mobile — admins edit via portal. See `MOBILE_USER_PROFILE_MESSAGE.md`.
+
 ### Tokens
 
 | Token | Lifetime | Notes |

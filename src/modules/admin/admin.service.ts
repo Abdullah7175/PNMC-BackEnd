@@ -243,6 +243,11 @@ export class UsersService {
       passwordHash,
       fullName: dto.fullName,
       employeeId: dto.employeeId ?? null,
+      phone: dto.phone ?? null,
+      nic: dto.nic ?? null,
+      designation: dto.designation ?? null,
+      address: dto.address ?? null,
+      officeDetails: dto.officeDetails ?? null,
       province: dto.province ?? null,
       district: dto.district ?? null,
       isMobileUser: dto.isMobileUser ?? false,
@@ -281,6 +286,11 @@ export class UsersService {
 
     if (dto.fullName) user.fullName = dto.fullName;
     if (dto.employeeId !== undefined) user.employeeId = dto.employeeId;
+    if (dto.phone !== undefined) user.phone = dto.phone;
+    if (dto.nic !== undefined) user.nic = dto.nic;
+    if (dto.designation !== undefined) user.designation = dto.designation;
+    if (dto.address !== undefined) user.address = dto.address;
+    if (dto.officeDetails !== undefined) user.officeDetails = dto.officeDetails;
     if (dto.province !== undefined) user.province = dto.province;
     if (dto.district !== undefined) user.district = dto.district;
     if (dto.isActive !== undefined) user.isActive = dto.isActive;

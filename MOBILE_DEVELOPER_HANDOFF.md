@@ -147,6 +147,11 @@ Content-Type: application/json
     "email": "inspector@pnmc.gov.pk",
     "fullName": "Field Inspector",
     "employeeId": "INS-2026-0001",
+    "phone": "03001234567",
+    "nic": "42101-1234567-1",
+    "designation": "Field Inspector",
+    "address": "Karachi Central, Sindh",
+    "officeDetails": "PNMC Regional Office — Karachi",
     "province": "Sindh",
     "district": "Karachi Central",
     "isMobileUser": true,
@@ -162,6 +167,22 @@ Content-Type: application/json
   }
 }
 ```
+
+**User profile fields** (returned on login, refresh, and `GET /auth/me`):
+
+| Field | Meaning |
+|-------|---------|
+| `fullName` | Full name |
+| `phone` | Mobile / phone number |
+| `nic` | National Identity Card (CNIC / NIC) |
+| `employeeId` | Work / employee identity number |
+| `designation` | Position / designation |
+| `address` | Residential / postal address |
+| `officeDetails` | Office name, location, or other office details |
+| `province` / `district` | Region |
+| `isMobileUser` | Must be `true` for mobile app |
+
+Profile is managed by portal admins (Users create/edit). Mobile is **read-only** for these fields via login / `/auth/me`.
 
 **Store on device:**
 

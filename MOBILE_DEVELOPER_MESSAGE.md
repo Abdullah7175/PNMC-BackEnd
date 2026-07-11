@@ -59,8 +59,10 @@ Email may only contain letters, numbers, `@`, and `.` (e.g. `admin@admin.com`).
 ### Auth
 - `POST /auth/login`
 - `POST /auth/refresh`
-- `GET /auth/me`
+- `GET /auth/me` — returns full profile (name, phone, NIC, work ID, designation, address, office details, region)
 - `POST /auth/logout`
+
+> **Profile note:** User details (phone, NIC, designation, address, office, etc.) are returned on login / me / refresh. Admins set them in the portal. See `MOBILE_USER_PROFILE_MESSAGE.md`.
 
 ### Lookups (do not hardcode lists)
 - `GET /mobile/lookups` ← use this after login

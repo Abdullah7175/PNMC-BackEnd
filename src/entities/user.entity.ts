@@ -14,8 +14,28 @@ export class User extends BaseEntity {
   @Column({ name: 'full_name', length: 255 })
   fullName: string;
 
+  /** Work / employee identity number */
   @Column({ name: 'employee_id', type: 'varchar', length: 50, nullable: true })
   employeeId: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  phone: string | null;
+
+  /** National Identity Card (CNIC / NIC) */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  nic: string | null;
+
+  /** Job title / designation / position */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  designation: string | null;
+
+  /** Residential / postal address */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  address: string | null;
+
+  /** Office name, location, or other office details */
+  @Column({ name: 'office_details', type: 'varchar', length: 500, nullable: true })
+  officeDetails: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   province: string | null;
