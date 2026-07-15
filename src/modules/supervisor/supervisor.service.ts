@@ -27,7 +27,7 @@ export class SupervisorService {
       district?: string;
     },
     baseUrl: string,
-    userProvince?: string | null,
+    _userProvince?: string | null,
   ) {
     const qb = this.inspectionRepo
       .createQueryBuilder('i')
@@ -52,10 +52,10 @@ export class SupervisorService {
 
     qb.andWhere('i.status IN (:...statuses)', { statuses });
 
+    // Only filter when the portal UI explicitly requests it — do not hide
+    // other provinces based on the supervisor user's profile province.
     if (filters.province) {
       qb.andWhere('i.province = :province', { province: filters.province });
-    } else if (userProvince) {
-      qb.andWhere('i.province = :province', { province: userProvince });
     }
 
     if (filters.district) {
@@ -68,11 +68,8 @@ export class SupervisorService {
     );
   }
 
-  async getStats(userProvince?: string | null) {
+  async getStats(_userProvince?: string | null) {
     const qb = this.inspectionRepo.createQueryBuilder('i');
-    if (userProvince) {
-      qb.where('i.province = :province', { province: userProvince });
-    }
 
     const all = await qb.getMany();
     const byStatus: Record<string, number> = {};

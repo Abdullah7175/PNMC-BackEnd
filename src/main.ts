@@ -31,6 +31,16 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter(Boolean);
 
+  // Local browsers often use 127.0.0.1 vs localhost — allow both in development only
+  if (!isProd) {
+    for (const origin of [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ]) {
+      if (!corsOrigins.includes(origin)) corsOrigins.push(origin);
+    }
+  }
+
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
