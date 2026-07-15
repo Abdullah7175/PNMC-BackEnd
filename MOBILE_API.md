@@ -41,6 +41,7 @@ Store in `flutter_secure_storage`. Logout revokes refresh server-side.
 - `POST /auth/logout`
 
 ### Lookups
+- `GET /mobile/assignment` — province/district scope + province supervisors
 - `GET /mobile/lookups`
 - `GET /mobile/lookups/provinces`
 - `GET /mobile/lookups/provinces/:provinceId/districts`

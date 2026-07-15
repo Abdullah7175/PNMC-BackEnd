@@ -53,6 +53,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       employeeId: user.employeeId,
       province: user.province,
       district: user.district,
+      provinceId: user.provinceId,
+      districtId: user.districtId,
       isMobileUser: user.isMobileUser,
       roles: user.roles.map((r) => ({ id: r.id, code: r.code, name: r.name })),
       permissions: Array.from(permissions),

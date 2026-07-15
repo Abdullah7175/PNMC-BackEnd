@@ -1,6 +1,16 @@
-import { Column, Entity, JoinTable, ManyToMany, Unique } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  JoinTable,
+  ManyToMany,
+  ManyToOne,
+  Unique,
+} from 'typeorm';
 import { BaseEntity } from '../common/entities/base.entity';
 import { Role } from './role.entity';
+import { Province } from './province.entity';
+import { District } from './district.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -37,11 +47,35 @@ export class User extends BaseEntity {
   @Column({ name: 'office_details', type: 'varchar', length: 500, nullable: true })
   officeDetails: string | null;
 
+  /** Display name (kept in sync with province relation) */
   @Column({ type: 'varchar', length: 100, nullable: true })
   province: string | null;
 
+  /** Display name (kept in sync with district relation) */
   @Column({ type: 'varchar', length: 100, nullable: true })
   district: string | null;
+
+  /**
+   * Supervisors are scoped to a province.
+   * Mobile inspectors belong to a province (and usually a district).
+   */
+  @Column({ name: 'province_id', type: 'uuid', nullable: true })
+  provinceId: string | null;
+
+  @ManyToOne(() => Province, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'province_id' })
+  assignedProvince: Province | null;
+
+  /**
+   * Mobile inspectors work under a district within their province.
+   * Supervisors typically leave this null (province-level only).
+   */
+  @Column({ name: 'district_id', type: 'uuid', nullable: true })
+  districtId: string | null;
+
+  @ManyToOne(() => District, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'district_id' })
+  assignedDistrict: District | null;
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

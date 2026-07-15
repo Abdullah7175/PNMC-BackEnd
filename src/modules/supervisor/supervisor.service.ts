@@ -2,14 +2,21 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Inspection } from '../../entities/inspection.entity';
 import { InspectionStatus } from '../../common/enums/inspection.enum';
 import { SupervisorReviewDto } from '../inspections/dto/inspection.dto';
 import { InspectionsService } from '../inspections/inspections.service';
 import { AuditService } from '../audit/audit.service';
+
+export type SupervisorScope = {
+  isAdmin?: boolean;
+  provinceId?: string | null;
+  province?: string | null;
+};
 
 @Injectable()
 export class SupervisorService {
@@ -20,6 +27,50 @@ export class SupervisorService {
     private auditService: AuditService,
   ) {}
 
+  private applyProvinceScope(
+    qb: ReturnType<Repository<Inspection>['createQueryBuilder']>,
+    scope?: SupervisorScope,
+  ) {
+    if (scope?.isAdmin) return;
+    if (scope?.provinceId) {
+      qb.andWhere(
+        '(i.provinceId = :scopeProvinceId OR (i.provinceId IS NULL AND i.province = :scopeProvinceName))',
+        {
+          scopeProvinceId: scope.provinceId,
+          scopeProvinceName: scope.province ?? null,
+        },
+      );
+      return;
+    }
+    if (scope?.province) {
+      qb.andWhere('i.province = :scopeProvinceName', {
+        scopeProvinceName: scope.province,
+      });
+    }
+  }
+
+  private assertInScope(inspection: Inspection, scope?: SupervisorScope) {
+    if (!scope || scope.isAdmin) return;
+    if (scope.provinceId) {
+      const ok =
+        inspection.provinceId === scope.provinceId ||
+        (!inspection.provinceId &&
+          !!scope.province &&
+          inspection.province === scope.province);
+      if (!ok) {
+        throw new ForbiddenException(
+          'This inspection is outside your assigned province',
+        );
+      }
+      return;
+    }
+    if (scope.province && inspection.province !== scope.province) {
+      throw new ForbiddenException(
+        'This inspection is outside your assigned province',
+      );
+    }
+  }
+
   async findQueue(
     filters: {
       status?: string;
@@ -27,7 +78,7 @@ export class SupervisorService {
       district?: string;
     },
     baseUrl: string,
-    _userProvince?: string | null,
+    scope?: SupervisorScope,
   ) {
     const qb = this.inspectionRepo
       .createQueryBuilder('i')
@@ -52,9 +103,9 @@ export class SupervisorService {
 
     qb.andWhere('i.status IN (:...statuses)', { statuses });
 
-    // Only filter when the portal UI explicitly requests it — do not hide
-    // other provinces based on the supervisor user's profile province.
-    if (filters.province) {
+    this.applyProvinceScope(qb, scope);
+
+    if (filters.province && scope?.isAdmin) {
       qb.andWhere('i.province = :province', { province: filters.province });
     }
 
@@ -68,8 +119,9 @@ export class SupervisorService {
     );
   }
 
-  async getStats(_userProvince?: string | null) {
+  async getStats(scope?: SupervisorScope) {
     const qb = this.inspectionRepo.createQueryBuilder('i');
+    this.applyProvinceScope(qb, scope);
 
     const all = await qb.getMany();
     const byStatus: Record<string, number> = {};
@@ -86,10 +138,15 @@ export class SupervisorService {
       changesRequested: byStatus[InspectionStatus.CHANGES_REQUESTED] ?? 0,
       resubmitted: byStatus[InspectionStatus.RESUBMITTED] ?? 0,
       byStatus,
+      scopedProvinceId: scope?.provinceId ?? null,
+      scopedProvince: scope?.province ?? null,
     };
   }
 
-  async findOne(id: string, baseUrl: string) {
+  async findOne(id: string, baseUrl: string, scope?: SupervisorScope) {
+    const inspection = await this.inspectionRepo.findOne({ where: { id } });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+    this.assertInScope(inspection, scope);
     return this.inspectionsService.findOne(id, baseUrl);
   }
 
@@ -98,9 +155,11 @@ export class SupervisorService {
     dto: SupervisorReviewDto,
     reviewerId: string,
     baseUrl: string,
+    scope?: SupervisorScope,
   ) {
     const inspection = await this.inspectionRepo.findOne({ where: { id } });
     if (!inspection) throw new NotFoundException('Inspection not found');
+    this.assertInScope(inspection, scope);
 
     const reviewable = [
       InspectionStatus.SUBMITTED,
@@ -145,7 +204,7 @@ export class SupervisorService {
       newValue: { status: inspection.status, remarks: dto.remarks },
     });
 
-    return this.findOne(id, baseUrl);
+    return this.findOne(id, baseUrl, scope);
   }
 
   async assign(

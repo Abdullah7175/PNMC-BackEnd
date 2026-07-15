@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../../entities/user.entity';
 import { Role } from '../../entities/role.entity';
 import { Permission } from '../../entities/permission.entity';
+import { Province } from '../../entities/province.entity';
+import { District } from '../../entities/district.entity';
 import {
   PermissionsService,
   RolesService,
@@ -17,7 +19,7 @@ import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, Permission]),
+    TypeOrmModule.forFeature([User, Role, Permission, Province, District]),
     AuditModule,
   ],
   controllers: [UsersController, RolesController, PermissionsController],

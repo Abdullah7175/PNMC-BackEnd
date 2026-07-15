@@ -201,13 +201,33 @@ export class CreateUserDto {
   @MaxLength(500)
   officeDetails?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'Master province UUID — required for supervisors (province scope) and preferred for mobile inspectors',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  provinceId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Master district UUID — required for mobile field inspectors (district scope)',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  districtId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Legacy display name; prefer provinceId',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   province?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Legacy display name; prefer districtId',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -274,17 +294,35 @@ export class UpdateUserDto {
   @MaxLength(500)
   officeDetails?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Master province UUID (supervisor → province; inspector → province)',
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  province?: string;
+  @IsUUID('4')
+  provinceId?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Master district UUID (mobile inspector district assignment)',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  districtId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Legacy display name; prefer provinceId',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  district?: string;
+  province?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Legacy display name; prefer districtId',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  district?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

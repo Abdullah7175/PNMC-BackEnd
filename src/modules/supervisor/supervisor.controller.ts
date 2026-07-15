@@ -10,13 +10,32 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { SupervisorService } from './supervisor.service';
+import {
+  SupervisorService,
+  SupervisorScope,
+} from './supervisor.service';
 import {
   AssignInspectionDto,
   SupervisorReviewDto,
 } from '../inspections/dto/inspection.dto';
 import { JwtAuthGuard, PermissionsGuard } from '../../common/guards/auth.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+
+type AuthUser = {
+  id: string;
+  province?: string | null;
+  provinceId?: string | null;
+  roles?: { code: string }[];
+};
+
+function toScope(user: AuthUser): SupervisorScope {
+  const isAdmin = user.roles?.some((r) => r.code === 'admin') ?? false;
+  return {
+    isAdmin,
+    provinceId: user.provinceId ?? null,
+    province: user.province ?? null,
+  };
+}
 
 @ApiTags('Supervisor')
 @ApiBearerAuth()
@@ -31,8 +50,8 @@ export class SupervisorController {
 
   @Get('dashboard/stats')
   @RequirePermissions('dashboard.view')
-  stats(@Req() req: { user: { province?: string | null } }) {
-    return this.supervisorService.getStats(req.user.province);
+  stats(@Req() req: { user: AuthUser }) {
+    return this.supervisorService.getStats(toScope(req.user));
   }
 
   @Get('inspections')
@@ -42,7 +61,7 @@ export class SupervisorController {
     @Query('province') province: string,
     @Query('district') district: string,
     @Req() req: {
-      user: { province?: string | null };
+      user: AuthUser;
       protocol: string;
       get: (h: string) => string;
     },
@@ -50,7 +69,7 @@ export class SupervisorController {
     return this.supervisorService.findQueue(
       { status, province, district },
       this.baseUrl(req),
-      req.user.province,
+      toScope(req.user),
     );
   }
 
@@ -58,9 +77,17 @@ export class SupervisorController {
   @RequirePermissions('inspections.view')
   findOne(
     @Param('id') id: string,
-    @Req() req: { protocol: string; get: (h: string) => string },
+    @Req() req: {
+      user: AuthUser;
+      protocol: string;
+      get: (h: string) => string;
+    },
   ) {
-    return this.supervisorService.findOne(id, this.baseUrl(req));
+    return this.supervisorService.findOne(
+      id,
+      this.baseUrl(req),
+      toScope(req.user),
+    );
   }
 
   @Patch('inspections/:id/review')
@@ -69,7 +96,7 @@ export class SupervisorController {
     @Param('id') id: string,
     @Body() dto: SupervisorReviewDto,
     @Req() req: {
-      user: { id: string };
+      user: AuthUser;
       protocol: string;
       get: (h: string) => string;
     },
@@ -79,6 +106,7 @@ export class SupervisorController {
       dto,
       req.user.id,
       this.baseUrl(req),
+      toScope(req.user),
     );
   }
 }

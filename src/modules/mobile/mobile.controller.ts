@@ -29,12 +29,17 @@ import { JwtAuthGuard, PermissionsGuard } from '../../common/guards/auth.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { MasterDataService } from '../master-data/master-data.service';
 import { AuditService } from '../audit/audit.service';
+import { MobileService } from './mobile.service';
 
 type AuthReq = {
   user: {
     id: string;
     fullName: string;
     isMobileUser?: boolean;
+    provinceId?: string | null;
+    districtId?: string | null;
+    province?: string | null;
+    district?: string | null;
     roles?: { code: string }[];
   };
   protocol: string;
@@ -52,6 +57,7 @@ export class MobileController {
     private readonly inspectionsService: InspectionsService,
     private readonly masterDataService: MasterDataService,
     private readonly auditService: AuditService,
+    private readonly mobileService: MobileService,
   ) {}
 
   private baseUrl(req: AuthReq) {
@@ -69,20 +75,28 @@ export class MobileController {
     }
   }
 
+  /**
+   * Org assignment: province, district, and province supervisor(s).
+   */
+  @Get('assignment')
+  @RequirePermissions('mobile.inspections.view')
+  assignment(@Req() req: AuthReq) {
+    this.assertMobileUser(req);
+    return this.mobileService.getAssignment(req.user.id);
+  }
+
   @Get('lookups')
   @RequirePermissions('mobile.inspections.view')
   lookups(@Req() req: AuthReq) {
     this.assertMobileUser(req);
-    return this.masterDataService.getMobileLookups();
+    return this.mobileService.getScopedLookups(req.user.id);
   }
 
   @Get('lookups/provinces')
   @RequirePermissions('mobile.inspections.view')
   provinces(@Req() req: AuthReq) {
     this.assertMobileUser(req);
-    return this.masterDataService.findProvinces(true).then((list) =>
-      list.map((p) => ({ id: p.id, name: p.name, code: p.code })),
-    );
+    return this.mobileService.getScopedProvinces(req.user.id);
   }
 
   @Get('lookups/provinces/:provinceId/districts')
@@ -92,14 +106,7 @@ export class MobileController {
     @Req() req: AuthReq,
   ) {
     this.assertMobileUser(req);
-    return this.masterDataService.findDistricts(provinceId, true).then((list) =>
-      list.map((d) => ({
-        id: d.id,
-        name: d.name,
-        code: d.code,
-        provinceId: d.provinceId,
-      })),
-    );
+    return this.mobileService.getScopedDistricts(req.user.id, provinceId);
   }
 
   @Get('lookups/applied-for')
@@ -146,10 +153,14 @@ export class MobileController {
 
   @Post('inspections')
   @RequirePermissions('mobile.inspections.create')
-  create(@Body() dto: CreateInspectionDto, @Req() req: AuthReq) {
+  async create(@Body() dto: CreateInspectionDto, @Req() req: AuthReq) {
     this.assertMobileUser(req);
-    return this.inspectionsService.create(
+    const scoped = await this.mobileService.applyLocationScopeToCreate(
+      req.user.id,
       dto,
+    );
+    return this.inspectionsService.create(
+      scoped,
       req.user.id,
       this.baseUrl(req),
       'mobile',
@@ -158,15 +169,19 @@ export class MobileController {
 
   @Patch('inspections/:id')
   @RequirePermissions('mobile.inspections.update')
-  update(
+  async update(
     @Param('id', uuid()) id: string,
     @Body() dto: UpdateInspectionDto,
     @Req() req: AuthReq,
   ) {
     this.assertMobileUser(req);
+    const scoped = await this.mobileService.applyLocationScopeToUpdate(
+      req.user.id,
+      dto,
+    );
     return this.inspectionsService.update(
       id,
-      dto,
+      scoped,
       req.user.id,
       this.baseUrl(req),
       'mobile',

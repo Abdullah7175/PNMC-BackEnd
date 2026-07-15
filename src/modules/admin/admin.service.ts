@@ -9,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 import { Role } from '../../entities/role.entity';
 import { Permission } from '../../entities/permission.entity';
 import { User } from '../../entities/user.entity';
+import { Province } from '../../entities/province.entity';
+import { District } from '../../entities/district.entity';
 import {
   CreatePermissionDto,
   CreateRoleDto,
@@ -214,8 +216,82 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Role) private roleRepo: Repository<Role>,
+    @InjectRepository(Province) private provinceRepo: Repository<Province>,
+    @InjectRepository(District) private districtRepo: Repository<District>,
     private auditService: AuditService,
   ) {}
+
+  /**
+   * Resolve provinceId/districtId (+ display names) for role-based org assignment:
+   * - Supervisor → province (district optional/null)
+   * - Mobile inspector → district within a province
+   */
+  private async resolveLocationAssignment(input: {
+    provinceId?: string | null;
+    districtId?: string | null;
+    province?: string | null;
+    district?: string | null;
+  }) {
+    let provinceId =
+      input.provinceId === undefined ? undefined : input.provinceId;
+    let districtId =
+      input.districtId === undefined ? undefined : input.districtId;
+    let province = input.province === undefined ? undefined : input.province;
+    let district = input.district === undefined ? undefined : input.district;
+
+    if (districtId) {
+      const d = await this.districtRepo.findOne({
+        where: { id: districtId },
+        relations: { province: true },
+      });
+      if (!d) throw new BadRequestException('Invalid districtId');
+      districtId = d.id;
+      district = d.name;
+      provinceId = d.provinceId;
+      province = d.province?.name ?? province ?? null;
+    } else if (provinceId) {
+      const p = await this.provinceRepo.findOne({ where: { id: provinceId } });
+      if (!p) throw new BadRequestException('Invalid provinceId');
+      provinceId = p.id;
+      province = p.name;
+      if (district) {
+        const d = await this.districtRepo.findOne({
+          where: { provinceId, name: district },
+        });
+        if (d) {
+          districtId = d.id;
+          district = d.name;
+        } else {
+          districtId = null;
+        }
+      } else if (districtId === null || district === null) {
+        districtId = null;
+        district = null;
+      }
+    } else if (province) {
+      const p = await this.provinceRepo.findOne({ where: { name: province } });
+      if (p) {
+        provinceId = p.id;
+        province = p.name;
+        if (district) {
+          const d = await this.districtRepo.findOne({
+            where: { provinceId: p.id, name: district },
+          });
+          if (d) {
+            districtId = d.id;
+            district = d.name;
+          }
+        }
+      }
+    }
+
+    return {
+      provinceId: provinceId === undefined ? undefined : provinceId,
+      districtId: districtId === undefined ? undefined : districtId,
+      province: province === undefined ? undefined : province,
+      district: district === undefined ? undefined : district,
+    };
+  }
 
   async findAll() {
     const users = await this.userRepo.find({ order: { fullName: 'ASC' } });
@@ -237,6 +313,18 @@ export class UsersService {
 
     const roles = await this.roleRepo.findBy({ id: In(dto.roleIds) });
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const location = await this.resolveLocationAssignment({
+      provinceId: dto.provinceId,
+      districtId: dto.districtId,
+      province: dto.province,
+      district: dto.district,
+    });
+
+    if (dto.isMobileUser && !location.districtId && !location.provinceId) {
+      throw new BadRequestException(
+        'Mobile inspectors must be assigned a province and district (use provinceId / districtId)',
+      );
+    }
 
     const user = this.userRepo.create({
       email: dto.email.toLowerCase(),
@@ -248,8 +336,10 @@ export class UsersService {
       designation: dto.designation ?? null,
       address: dto.address ?? null,
       officeDetails: dto.officeDetails ?? null,
-      province: dto.province ?? null,
-      district: dto.district ?? null,
+      province: location.province ?? null,
+      district: location.district ?? null,
+      provinceId: location.provinceId ?? null,
+      districtId: location.districtId ?? null,
       isMobileUser: dto.isMobileUser ?? false,
       roles,
     });
@@ -267,6 +357,8 @@ export class UsersService {
         email: saved.email,
         fullName: saved.fullName,
         isMobileUser: saved.isMobileUser,
+        provinceId: saved.provinceId,
+        districtId: saved.districtId,
         roles: roles.map((r) => r.code),
       },
     });
@@ -282,6 +374,8 @@ export class UsersService {
       fullName: user.fullName,
       isActive: user.isActive,
       isMobileUser: user.isMobileUser,
+      provinceId: user.provinceId,
+      districtId: user.districtId,
     };
 
     if (dto.fullName) user.fullName = dto.fullName;
@@ -291,8 +385,6 @@ export class UsersService {
     if (dto.designation !== undefined) user.designation = dto.designation;
     if (dto.address !== undefined) user.address = dto.address;
     if (dto.officeDetails !== undefined) user.officeDetails = dto.officeDetails;
-    if (dto.province !== undefined) user.province = dto.province;
-    if (dto.district !== undefined) user.district = dto.district;
     if (dto.isActive !== undefined) user.isActive = dto.isActive;
     if (dto.isMobileUser !== undefined) user.isMobileUser = dto.isMobileUser;
     if (dto.password) user.passwordHash = await bcrypt.hash(dto.password, 10);
@@ -300,22 +392,43 @@ export class UsersService {
       user.roles = await this.roleRepo.findBy({ id: In(dto.roleIds) });
     }
 
+    if (
+      dto.provinceId !== undefined ||
+      dto.districtId !== undefined ||
+      dto.province !== undefined ||
+      dto.district !== undefined
+    ) {
+      const location = await this.resolveLocationAssignment({
+        provinceId:
+          dto.provinceId !== undefined ? dto.provinceId : user.provinceId,
+        districtId:
+          dto.districtId !== undefined ? dto.districtId : user.districtId,
+        province: dto.province !== undefined ? dto.province : user.province,
+        district: dto.district !== undefined ? dto.district : user.district,
+      });
+      if (location.provinceId !== undefined) user.provinceId = location.provinceId;
+      if (location.districtId !== undefined) user.districtId = location.districtId;
+      if (location.province !== undefined) user.province = location.province;
+      if (location.district !== undefined) user.district = location.district;
+    }
+
     const saved = await this.userRepo.save(user);
     const { passwordHash, ...rest } = saved;
 
     await this.auditService.log({
       entityType: 'user',
-      entityId: id,
+      entityId: saved.id,
       action: 'updated',
       actorId,
       source: 'portal',
       description: `Updated user ${saved.email}`,
       oldValue: old,
       newValue: {
-        fullName: dto.fullName,
-        isActive: dto.isActive,
-        isMobileUser: dto.isMobileUser,
-        passwordChanged: !!dto.password,
+        fullName: saved.fullName,
+        isActive: saved.isActive,
+        isMobileUser: saved.isMobileUser,
+        provinceId: saved.provinceId,
+        districtId: saved.districtId,
       },
     });
 

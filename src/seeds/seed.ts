@@ -381,10 +381,46 @@ async function seed() {
     }
   }
 
+  console.log('Linking demo users to province / district assignments...');
+  const sindh = await provinceRepo.findOne({ where: { name: 'Sindh' } });
+  const karachiCentral = sindh
+    ? await districtRepo.findOne({
+        where: { provinceId: sindh.id, name: 'Karachi Central' },
+      })
+    : null;
+
+  if (sindh) {
+    const supervisor = await userRepo.findOne({
+      where: { email: 'supervisor@pnmc.gov.pk' },
+    });
+    if (supervisor) {
+      supervisor.province = sindh.name;
+      supervisor.provinceId = sindh.id;
+      supervisor.district = null;
+      supervisor.districtId = null;
+      await userRepo.save(supervisor);
+    }
+
+    const inspector = await userRepo.findOne({
+      where: { email: 'inspector@pnmc.gov.pk' },
+    });
+    if (inspector) {
+      inspector.province = sindh.name;
+      inspector.provinceId = sindh.id;
+      if (karachiCentral) {
+        inspector.district = karachiCentral.name;
+        inspector.districtId = karachiCentral.id;
+      }
+      await userRepo.save(inspector);
+    }
+  }
+
   console.log('Seed completed successfully!');
   console.log('Admin:      admin@pnmc.gov.pk / Admin@123');
-  console.log('Supervisor: supervisor@pnmc.gov.pk / Supervisor@123');
-  console.log('Field (mobile): inspector@pnmc.gov.pk / Field@123  [isMobileUser=true]');
+  console.log('Supervisor: supervisor@pnmc.gov.pk / Supervisor@123  [province=Sindh]');
+  console.log(
+    'Field (mobile): inspector@pnmc.gov.pk / Field@123  [Sindh / Karachi Central]',
+  );
 
   await dataSource.destroy();
 }

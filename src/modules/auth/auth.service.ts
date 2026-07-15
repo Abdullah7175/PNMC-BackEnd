@@ -68,6 +68,8 @@ export class AuthService {
       officeDetails: user.officeDetails,
       province: user.province,
       district: user.district,
+      provinceId: user.provinceId,
+      districtId: user.districtId,
       isMobileUser: user.isMobileUser,
       roles: user.roles.map((r) => ({
         id: r.id,
